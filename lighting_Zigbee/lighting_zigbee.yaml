@@ -201,7 +201,7 @@
                                       
                           sequence:
                             - variables:
-                                auto_time: "00:01:30"   
+                                auto_time: "00:01:00"   
                                 manual_time: "00:05:00"                          
                           
                             - action: timer.start
