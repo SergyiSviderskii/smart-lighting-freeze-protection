@@ -188,13 +188,8 @@
                             - condition: or
                               conditions:
                                 # Вариант А: Таймер тикает, и пришло новое движение (продлеваем)
-                                - condition: and
-                                  conditions:
-                                    - condition: state
-                                      entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
-                                      state: active
-                                    - condition: trigger
-                                      id: trigger_inp_zone
+                                - condition: trigger
+                                  id: trigger_inp_zone
                                 # Вариант Б: Таймер финишировал, но кто-то остался в зоне
                                 - condition: and
                                   conditions:
