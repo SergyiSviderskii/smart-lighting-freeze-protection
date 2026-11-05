@@ -1,0 +1,15 @@
+# Секреты и пароли (КРИТИЧЕСКИ ВАЖНО)
+secrets.yaml
+
+# Базы данных и системный мусор Home Assistant
+*.db
+*.db-shm
+*.db-wal
+*.log
+.storage/
+__pycache__/
+*.pyc
+
+# Временные файлы компиляции ESPHome
+.esphome/
+build/
