@@ -141,19 +141,20 @@
                       value_template: "{{ state_attr('sun.sun', 'elevation') | float <= states('sensor.raschetnyi_ugol_solntsa') | float }}"  
                           
                   sequence:
-                    - action: light.turn_on
-                      target:
-                        entity_id: light.dom_kukhnia_osveshchenie_vkl_vyk
-                        
-                    - action: input_boolean.turn_off
-                      target:
-                        entity_id: input_boolean.vspomogatelnyi_peremennoi_taimera_osveshcheniia_kukhnia  
-                        
                     - action: timer.start
                       target:
                         entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
                       data:
-                        duration: "00:01:00"
+                        duration: "00:01:00" 
+                        
+                    - action: input_boolean.turn_on
+                      target:
+                        entity_id: input_boolean.vspomogatelnyi_peremennoi_taimera_osveshcheniia_kukhnia  
+                        
+                    - action: light.turn_on
+                      target:
+                        entity_id: light.dom_kukhnia_osveshchenie_vkl_vyk
+                        
     
                 #ВЕТКА 2: СВЕТ УЖЕ ГОРИТ (Продление и ручной режим)
                 - conditions:
@@ -171,12 +172,11 @@
                             - condition: state
                               entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
                               state: idle
+                            - condition: state
+                              entity_id: input_boolean.vspomogatelnyi_peremennoi_taimera_osveshcheniia_kukhnia
+                              state: 'off'                              
                               
                           sequence:
-                            - action: input_boolean.turn_on
-                              target:
-                                entity_id: input_boolean.vspomogatelnyi_peremennoi_taimera_osveshcheniia_kukhnia 
-                                
                             - action: timer.start
                               target:
                                 entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
@@ -210,9 +210,9 @@
                               data:
                                 duration: >-
                                   {% if is_state('input_boolean.vspomogatelnyi_peremennoi_taimera_osveshcheniia_kukhnia', 'on') %}
-                                    {{ manual_time }}                                    
+                                    {{ auto_time }}                                  
                                   {% else %}
-                                    {{ auto_time }}
+                                     {{ manual_time }}  
                                   {% endif %}
                                       
                             # Контроль зависания датчика PIR        
