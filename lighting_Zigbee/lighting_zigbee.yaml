@@ -235,24 +235,19 @@
                                       above: 5 # (выше 5 — это значит 6)  
                                       
                                   then:
-                                    # Насильно сбрасываем датчик в 'off' через наш Python-скрипт:
-                                    - action: python_script.set_state
-                                      data:
-                                        entity_id: binary_sensor.dom_kukhnia_pir_dvizhenie
-                                        state: "off"  
-                                        
-                                    # Обнуляем счетчик 
-                                    - action: counter.reset
-                                      target:
-                                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_kukhnia                              
-                                        
                                     # УВЕДОМЛЕНИЕ О РЕАНИМАЦИИ ДАТЧИКА:
                                     - action: script.notify_message
                                       data:
                                         title: >-
                                           ⚠️ Внимание: Дом — кухня
                                         message: |
-                                          🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой.    
+                                          🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой. 
+                                          
+                                    # Насильно сбрасываем датчик в 'off' через наш Python-скрипт:
+                                    - action: python_script.set_state
+                                      data:
+                                        entity_id: binary_sensor.dom_kukhnia_pir_dvizhenie
+                                        state: "off"   
                                         
                                   else: []                     
                             
