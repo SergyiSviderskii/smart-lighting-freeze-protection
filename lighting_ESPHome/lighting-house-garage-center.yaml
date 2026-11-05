@@ -1,0 +1,24 @@
+# tywe3s 
+substitutions:
+  hostname: "lighting-house-garage-center"  
+  password_ota: "" 
+  #key_api: ""
+  installation_area: "дом - гараж центр"
+  title_device_1: "вход лет. кухня"
+  title_device_2: "центр"
+  title_device_3: "вход с улицы"
+  title_device_4: "общее"
+  timer_switch: "300000"
+  timer_button: "30000"
+  device_1: "outlet_summer_kitchen"
+  device_2: "center"
+  device_3: "entrance_street"
+  device_4: "general"  
+
+  
+packages:
+  - !include device/common/function/lighting/switch_tywe3s/four.yaml
+  - !include device/common/function/lighting/switch_tywe3s/general.yaml     
+  - !include device/lighting/general.yaml
+
+

@@ -1,0 +1,48 @@
+substitutions:
+  esp8266_board: esp01_1m
+  restore_from_flash: false
+  status_inverted: true   
+  # Важнейший параметр! По умолчанию сущность света для HA создается:
+  internal_light_mode: false    
+  
+  
+
+packages:
+  - !include ../../../../common/esp8266/board.yaml
+  
+
+sensor:
+  - platform: template
+    name: "Calculated Sun Elevation"   
+    id: calculated_sun_elevation
+    unit_of_measurement: °
+    icon: mdi:sun-angle-outline
+    accuracy_decimals: 1
+    lambda: |-
+      auto tm = id(homeassistant_time).now();
+    
+      if (tm.is_valid()) {
+        int day_of_year = tm.to_c_tm().tm_yday;
+        int year = tm.to_c_tm().tm_year + 1900;
+      
+        // Динамически определяем количество дней в году (365 или 366)
+        float days_in_year = ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)) ? 366.0f : 365.0f;
+        int offset = (days_in_year > 365.0f) ? 173 : 172; // Корректный сдвиг солнцестояния
+    
+        float base = 5.5f;
+        float amp = 2.5f;
+    
+        // Зима = +8.0° (включаем раньше), Лето = +3.0° (включаем позже)
+        float target = base - amp * cosf((day_of_year - offset) * 2.0f * (float)M_PI / days_in_year);
+    
+        ESP_LOGD("sun-logic", "Home logic: Day=%d, Target=%.2f°, Current=%.2f°",
+              day_of_year, target, id(sun_elevation).state);
+      
+        // Принудительное округление до 1 знака после запятой перед отправкой в Home Assistant
+        return roundf(target * 10.0f) / 10.0f;
+      } else {
+        return 5.5f;
+      }
+    update_interval: 30s
+      
+    

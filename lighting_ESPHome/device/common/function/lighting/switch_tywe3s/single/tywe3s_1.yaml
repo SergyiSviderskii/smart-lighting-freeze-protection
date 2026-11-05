@@ -1,0 +1,12 @@
+substitutions:
+  status_led: GPIO16
+  led_cmd: "0s"
+  led_relay: "0s"  
+  led_on: "delay"  
+  led_off: "delay"   
+  button_devise: "5"
+  button_devise_id: "GPIO5"
+  light_pin: "GPIO15"
+  light_out_id: "gpio_d15"
+  light_id: "light_gpio15"
+

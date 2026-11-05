@@ -1,0 +1,15 @@
+# tywe3s 
+substitutions:
+  hostname: "lighting-house-bathroom"
+  password_ota: "" 
+  #key_api: ""
+  installation_area: "дом - ванная"
+  timer_switch: "300000"
+  timer_button: "60000"
+
+  
+packages:
+  - !include device/common/function/lighting/switch_tywe3s/single/tywe3s_1.yaml
+  - !include device/common/function/lighting/switch_tywe3s/single/general.yaml
+  - !include device/common/function/lighting/switch_tywe3s/general.yaml     
+  - !include device/lighting/general.yaml   

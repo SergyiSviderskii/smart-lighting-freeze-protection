@@ -1,0 +1,8 @@
+time:
+  - platform: sntp
+    id: homeassistant_time
+    timezone: "Europe/Chisinau"    
+    servers:
+      - 192.168.0.2   # 1. Ваш Home Assistant (уже раздает время по локалке через Chrony)
+      - 192.168.0.200 # 2. Локальный сервер времени
+      - pool.ntp.org  # 3. Резерв из интернета (если HA вдруг выключен)    

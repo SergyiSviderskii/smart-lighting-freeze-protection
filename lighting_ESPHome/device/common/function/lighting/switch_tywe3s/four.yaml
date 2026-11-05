@@ -1,0 +1,571 @@
+substitutions:
+  status_led: GPIO0
+
+
+esphome:
+  on_boot:
+    priority: 600  
+    then:
+      - binary_sensor.template.publish:
+          id: flag_off 
+          state: OFF     
+      - binary_sensor.template.publish:
+          id: flag_light_gpio14 
+          state: OFF           
+      - binary_sensor.template.publish:
+          id: flag_no_activation   
+          state: OFF
+      - binary_sensor.template.publish:
+          id: pir_lighting  
+          state: OFF
+      - sensor.template.publish:
+          id: timer_on_off
+          state: '0.0'                  
+      - text_sensor.template.publish:
+          id: point_bssid
+          state: "Нет данных"    
+      - text_sensor.template.publish:
+          id: bssid_point 
+          state: "Нет данных"    
+    
+    
+script:
+  - id: timer_script
+    mode: restart 
+    parameters:
+      delay_ms: int
+    then:
+      - delay: !lambda return delay_ms;
+      - if:
+          condition:
+            # Четко проверяем присутствие именно Home Assistant (подписка на стейты)
+            - api.connected:
+                state_subscription_only: true
+          then:
+            - if:
+                condition:
+                  - light.is_on: light_gpio14  
+                then: 
+                  - light.turn_off: light_gpio14 
+                else:
+                  - light.turn_off: light_gpio13 
+                  - light.turn_off: light_gpio4
+                  - light.turn_off: light_gpio15  
+          else:  
+            - if:
+                condition:
+                  - or:
+                      - light.is_on: light_gpio14 
+                      - light.is_on: light_gpio13
+                      - light.is_on: light_gpio4 
+                      - light.is_on: light_gpio15                         
+                then:             
+                  - button.press: control_ha      
+                  
+  - id: timer_script_pir
+    mode: restart 
+    parameters:
+      delay_ms: int
+    then:
+      - delay: !lambda return delay_ms;
+      - binary_sensor.template.publish:
+          id: pir_lighting
+          state: OFF    
+          
+  - id: script_off
+    then:  
+      - script.stop: timer_script
+      - script.stop: timer_script_pir 
+      - sensor.template.publish:
+          id: timer_on_off
+          state: '0.0'
+      - binary_sensor.template.publish:
+          id: pir_lighting  
+          state: OFF 
+          
+  - id: timer_script_off
+    mode: restart  
+    then:
+      - delay: 1000ms  
+      - binary_sensor.template.publish:
+          id: flag_off 
+          state: OFF            
+
+
+binary_sensor:
+  # button device_1
+  - platform: gpio
+    id: gpio12
+    pin:
+      number: 12
+      mode: INPUT_PULLUP        # Подтягивает пин к 3.3V, чтобы не было наводок
+      inverted: true            # Кнопка замыкается на Землю (GND) при нажатии  
+    filters:
+      - delayed_on: 50ms        # Мгновенная защита от искрения контактов (дребезга)
+    on_press:  
+      then:                  
+        - light.toggle: light_gpio13
+    internal: true  
+    
+  # button device_2
+  - platform: gpio
+    id: gpio3
+    pin:
+      number: 3
+      mode: INPUT_PULLUP        # Подтягивает пин к 3.3V, чтобы не было наводок
+      inverted: true            # Кнопка замыкается на Землю (GND) при нажатии  
+    filters:
+      - delayed_on: 50ms        # Мгновенная защита от искрения контактов (дребезга)
+    on_press:
+      then:                  
+        - light.toggle: light_gpio4
+    internal: true 
+    
+  # button device_3
+  - platform: gpio
+    id: gpio5
+    pin:
+      number: 5
+      mode: INPUT_PULLUP        # Подтягивает пин к 3.3V, чтобы не было наводок
+      inverted: true            # Кнопка замыкается на Землю (GND) при нажатии  
+    filters:
+      - delayed_on: 50ms        # Мгновенная защита от искрения контактов (дребезга)
+    on_press:
+      then:                  
+        - light.toggle: light_gpio15
+    internal: true  
+    
+  # button device_4
+  - platform: gpio
+    id: gpio16
+    pin:
+      number: 16
+      inverted: true            # Кнопка замыкается на Землю (GND) при нажатии  
+    filters:
+      - delayed_on: 50ms        # Мгновенная защита от искрения контактов (дребезга)
+    on_press:
+      then:                  
+        - light.toggle: light_gpio14
+    internal: true  
+    
+  - platform: template
+    id: flag_light_gpio14 
+    
+  - platform: template
+    id: flag_no_activation  
+    
+  - platform: template
+    id: flag_off      
+
+  - platform: template
+    name: "PIR Lighting"
+    id: pir_lighting
+    device_class: motion 
+    filters:
+      delayed_on_off: 300ms 
+    on_press:
+      then:
+        script.execute:
+          id: timer_script_pir
+          delay_ms: !lambda return (int)(id(timer_on_off).state / 2);   
+    
+    
+button:            
+  # button control autom ha
+  - platform: template
+    name: "control_ha"
+    icon: mdi:button-pointer    
+    id: control_ha
+    on_press:
+      then:
+        - if:
+            condition:
+              - binary_sensor.is_off: flag_off 
+            then:    
+              - if:
+                  condition:
+                    - light.is_off: light_gpio13
+                    - light.is_off: light_gpio4
+                    - light.is_off: light_gpio15
+                    - light.is_off: light_gpio14 
+                  then: 
+                    - if:
+                        condition:
+                          - lambda: |-
+                              return id(activation).state &&
+                                     !std::isnan(id(sun_elevation).state) &&
+                                     !std::isnan(id(calculated_sun_elevation).state) &&
+                                     id(sun_elevation).state <= id(calculated_sun_elevation).state;
+                        then:             
+                          - sensor.template.publish:
+                              id: timer_on_off
+                              state: $timer_button     
+                          - script.execute:
+                              id: timer_script
+                              delay_ms: $timer_button
+                          - light.turn_on: light_gpio13
+                          - light.turn_on: light_gpio4
+                          - light.turn_on: light_gpio15                              
+                  else:  
+                    - if:
+                        condition:
+                          - or:
+                              - light.is_on: light_gpio13
+                              - light.is_on: light_gpio4
+                              - light.is_on: light_gpio15
+                              - light.is_on: light_gpio14                           
+                        then:                  
+                          - if:
+                              condition:
+                                - lambda: |-
+                                    return id(timer_on_off).state == 0.0; 
+                              then:
+                                - sensor.template.publish:
+                                    id: timer_on_off
+                                    state: $timer_switch 
+                                - script.execute:
+                                    id: timer_script
+                                    delay_ms: $timer_switch   
+              - if:
+                  condition:
+                    - lambda: |-
+                        return id(timer_on_off).state != 0.0; 
+                  then: 
+                    - script.execute: 
+                        id: timer_script
+                        delay_ms: !lambda return (int)id(timer_on_off).state;                    
+                    - if:
+                        condition: 
+                          - binary_sensor.is_off: pir_lighting      
+                        then:
+                          - binary_sensor.template.publish:
+                              id: pir_lighting  
+                              state: ON                                                   
+
+output:
+  - platform: gpio
+    pin: GPIO13
+    id: gpio_d13
+    
+  - platform: gpio
+    pin: GPIO4
+    id: gpio_d4    
+    
+  - platform: gpio
+    pin: GPIO15
+    id: gpio_d15
+    
+  - platform: gpio
+    pin: GPIO14
+    id: gpio_d14        
+
+
+light: 
+  - platform: binary
+    name: "ON-OFF${device_1}" 
+    id: light_gpio13
+    output: gpio_d13
+    restore_mode: ALWAYS_OFF
+    on_turn_on:   
+      then: 
+        - delay: 300ms      
+        - if:
+            condition:
+              - or:
+                  - and:
+                      - binary_sensor.is_off: flag_light_gpio14
+                      - light.is_off: light_gpio14
+                    
+                  - and:
+                      - binary_sensor.is_on: flag_light_gpio14
+                      - light.is_on: light_gpio14       
+            then:   
+              - if:  
+                  condition:
+                    - switch.is_off: activation
+                  then:          
+                    - script.execute:
+                        id: service_ha
+                        title_data: $friendly_name 
+                        message_data: |  
+                          🏙 Зона: $installation_area 
+                          💡 Освещение: $title_device_1
+                          🟢 Статус: Включено
+        - if:
+            condition:
+              - lambda: |-
+                  return id(timer_on_off).state == 0.0; 
+            then:
+              - button.press: control_ha                          
+    on_turn_off:
+      then:  
+        - binary_sensor.template.publish:
+            id: flag_off 
+            state: ON  
+        - script.execute: timer_script_off         
+        - if:
+            condition:
+              - light.is_off: light_gpio14 
+              - light.is_off: light_gpio4
+              - light.is_off: light_gpio15  
+            then:
+              - script.execute: script_off                        
+        - if:
+            condition:
+              - or:
+                  - and:
+                      - binary_sensor.is_off: flag_light_gpio14
+                      - light.is_off: light_gpio14
+                    
+                  - and:
+                      - binary_sensor.is_on: flag_light_gpio14
+                      - light.is_on: light_gpio14      
+            then:    
+              - if:  
+                  condition:
+                    - switch.is_off: activation
+                    - binary_sensor.is_off: flag_no_activation
+                  then:          
+                    - script.execute:
+                        id: service_ha  
+                        title_data: $friendly_name 
+                        message_data: |  
+                          🏙 Зона: $installation_area 
+                          💡 Освещение: $title_device_1
+                          🔴 Статус: Выключено  
+
+  - platform: binary
+    name: "ON-OFF${device_2}"  
+    id: light_gpio4
+    output: gpio_d4 
+    restore_mode: ALWAYS_OFF
+    on_turn_on:   
+      then:
+        - delay: 300ms       
+        - if:
+            condition:
+              - or:
+                  - and:
+                      - binary_sensor.is_off: flag_light_gpio14
+                      - light.is_off: light_gpio14
+                    
+                  - and:
+                      - binary_sensor.is_on: flag_light_gpio14
+                      - light.is_on: light_gpio14    
+            then:   
+              - if:  
+                  condition:
+                    - switch.is_off: activation
+                  then:          
+                    - script.execute:
+                        id: service_ha
+                        title_data: $friendly_name 
+                        message_data: |  
+                          🏙 Зона: $installation_area 
+                          💡 Освещение: $title_device_2
+                          🟢 Статус: Включено   
+        - if:
+            condition:
+              - lambda: |-
+                  return id(timer_on_off).state == 0.0; 
+            then:
+              - button.press: control_ha                          
+    on_turn_off:
+      then:
+        - binary_sensor.template.publish:
+            id: flag_off 
+            state: ON  
+        - script.execute: timer_script_off       
+        - if:
+            condition:
+              - light.is_off: light_gpio14 
+              - light.is_off: light_gpio13
+              - light.is_off: light_gpio15  
+            then:
+              - script.execute: script_off                        
+        - if:
+            condition:
+              - or:
+                  - and:
+                      - binary_sensor.is_off: flag_light_gpio14
+                      - light.is_off: light_gpio14
+                    
+                  - and:
+                      - binary_sensor.is_on: flag_light_gpio14
+                      - light.is_on: light_gpio14        
+            then:  
+              - if:  
+                  condition:
+                    - switch.is_off: activation
+                    - binary_sensor.is_off: flag_no_activation
+                  then:          
+                    - script.execute:
+                        id: service_ha
+                        title_data: $friendly_name 
+                        message_data: |  
+                          🏙 Зона: $installation_area 
+                          💡 Освещение: $title_device_2
+                          🔴 Статус: Выключено 
+
+  - platform: binary
+    name: "ON-OFF${device_3}"
+    id: light_gpio15
+    output: gpio_d15  
+    restore_mode: ALWAYS_OFF
+    on_turn_on:  
+      then:
+        - delay: 300ms      
+        - if:
+            condition:
+              or:
+                - and:
+                    - binary_sensor.is_off: flag_light_gpio14
+                    - light.is_off: light_gpio14
+                    
+                - and:
+                    - binary_sensor.is_on: flag_light_gpio14
+                    - light.is_on: light_gpio14        
+            then: 
+              - if:  
+                  condition:
+                    - switch.is_off: activation
+                  then:          
+                    - script.execute:
+                        id: service_ha
+                        title_data: $friendly_name 
+                        message_data: |  
+                          🏙 Зона: $installation_area 
+                          💡 Освещение: $title_device_3
+                          🟢 Статус: Включено   
+        - if:
+            condition:
+              - lambda: |-
+                  return id(timer_on_off).state == 0.0; 
+            then:
+              - button.press: control_ha                          
+    on_turn_off:
+      then:
+        - binary_sensor.template.publish:
+            id: flag_off 
+            state: ON  
+        - script.execute: timer_script_off       
+        - if:
+            condition:
+              - light.is_off: light_gpio14 
+              - light.is_off: light_gpio4
+              - light.is_off: light_gpio13 
+            then:
+              - script.execute: script_off                         
+        - if:
+            condition:
+              or:
+                - and:
+                    - binary_sensor.is_off: flag_light_gpio14
+                    - light.is_off: light_gpio14
+                    
+                - and:
+                    - binary_sensor.is_on: flag_light_gpio14
+                    - light.is_on: light_gpio14       
+            then:  
+              - if:  
+                  condition:
+                    - switch.is_off: activation
+                    - binary_sensor.is_off: flag_no_activation
+                  then:          
+                    - script.execute:
+                        id: service_ha
+                        title_data: $friendly_name 
+                        message_data: |  
+                          🏙 Зона: $installation_area 
+                          💡 Освещение: $title_device_3
+                          🔴 Статус: Выключено 
+                          
+  - platform: binary
+    name: "ON-OFF${device_4}" 
+    id: light_gpio14
+    output: gpio_d14
+    restore_mode: ALWAYS_OFF
+    on_turn_on:   
+      then:
+        - delay: 300ms
+        - script.execute: script_off
+        - light.turn_on: light_gpio13 
+        - light.turn_on: light_gpio4
+        - light.turn_on: light_gpio15
+        - binary_sensor.template.publish:
+            id: flag_light_gpio14
+            state: ON              
+        - if:  
+            condition:
+              - switch.is_off: activation 
+            then:          
+              - script.execute:
+                  id: service_ha
+                  title_data: $friendly_name 
+                  message_data: |  
+                    🏙 Зона: $installation_area 
+                    💡 Освещение: $title_device_4
+                    🟢 Статус: Включено  
+        - if:
+            condition:
+              - lambda: |-
+                  return id(timer_on_off).state == 0.0; 
+            then:
+              - button.press: control_ha                       
+    on_turn_off:
+      then:
+        - binary_sensor.template.publish:
+            id: flag_off 
+            state: ON  
+        - script.execute: timer_script_off       
+        - script.execute: script_off       
+        - light.turn_off: light_gpio13      
+        - light.turn_off: light_gpio4  
+        - light.turn_off: light_gpio15
+        - binary_sensor.template.publish:
+            id: flag_light_gpio14
+            state: OFF                 
+        - if:  
+            condition:
+              - switch.is_off: activation 
+              - binary_sensor.is_off: flag_no_activation
+            then:          
+              - script.execute:
+                  id: service_ha
+                  title_data: $friendly_name 
+                  message_data: |  
+                    🏙 Зона: $installation_area 
+                    💡 Освещение: $title_device_4
+                    🔴 Статус: Выключено   
+        - binary_sensor.template.publish:
+            id: flag_no_activation
+            state: OFF  
+
+switch:                 
+  # (API esphome) когда activation вкл.(выкл.) присудствия в зоне активации  
+  - platform: template  
+    name: "activation"  
+    icon: mdi:home-account    
+    id: activation
+    optimistic: true
+    restore_mode: ALWAYS_ON
+    on_turn_off:   
+      then:   
+        - binary_sensor.template.publish:
+            id: flag_no_activation
+            state: ON  
+        - light.turn_off: light_gpio13   
+        - light.turn_off: light_gpio4 
+        - light.turn_off: light_gpio15
+        - light.turn_off: light_gpio14    
+        
+sensor:
+  - platform: template
+    id: timer_on_off
+    update_interval: never
+    unit_of_measurement: "ms"
+    accuracy_decimals: 0        
+                 
+              
+              
+              

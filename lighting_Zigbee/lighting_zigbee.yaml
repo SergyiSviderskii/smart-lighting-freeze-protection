@@ -1,0 +1,284 @@
+- id: ''
+  alias: Освещение дом Кухня
+  description: 'Автоматизация управления (Zigbee) - освещением на кухне по датчикам движения, двери и таймеру'
+  
+  triggers:
+    - trigger: state
+      entity_id:
+        - light.dom_kukhnia_osveshchenie_vkl_vyk
+      from:
+        - 'on'
+        - 'off'    
+      to:
+        - 'off'
+        - 'on'    
+      id: light_on_off
+      
+    - trigger: state
+      entity_id:
+        - binary_sensor.dom_kukhnia_pir_dvizhenie
+        - binary_sensor.dom_kukhnia_dver_kukhnia_letniaia_kukhnia
+      from: 
+        - 'off'      
+      to:
+        - 'on'  
+      id: trigger_inp_zone       
+      
+    - trigger: state
+      entity_id:
+        - binary_sensor.dom_kukhnia_pir_dvizhenie
+      from: 
+        - 'on'         
+      to:
+        - 'off'
+      id: trigger_out_zone  
+      
+    - trigger: event
+      event_type: timer.finished
+      event_data:
+        entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
+      id: system_timer_rear 
+      
+  conditions: []
+  
+  actions:
+    - choose:
+    
+        # # КАНАЛ A: Свет включился/выключился (вручную или извне)
+        - conditions:
+            - condition: trigger
+              id: light_on_off
+          sequence:
+            - choose:
+            
+                - conditions:
+                    - condition: state
+                      entity_id: light.dom_kukhnia_osveshchenie_vkl_vyk
+                      state: 'on'
+                      
+                  sequence:  
+                    # Уведомление отправляем только при физическом включении света
+                    - if:
+                        - condition: state
+                          entity_id: input_boolean.vspomogatelnyi_avtomatizatsii_voshli_vyshli_v_zonu_upravleniia_elektrichestvom
+                          state: 'off'
+                          
+                      then:
+                        - action: script.notify_message
+                          data:
+                            title: 💡 Освещение 
+                            message: |  
+                              🏙 Зона: дом - кухня 
+                              💡 Освещение: кухня
+                              🟢 Статус: Включено 
+                              
+                      else: []
+                
+                - conditions:
+                    - condition: state
+                      entity_id: light.dom_kukhnia_osveshchenie_vkl_vyk
+                      state: 'off'
+                      
+                  sequence:
+                  
+                    - if:
+                        - condition: state
+                          entity_id: input_boolean.vspomogatelnyi_avtomatizatsii_voshli_vyshli_v_zonu_upravleniia_elektrichestvom
+                          state: 'off'
+                          
+                      then:
+                        - action: script.notify_message
+                          data:
+                            title: 💡 Освещение 
+                            message: |  
+                              🏙 Зона: дом - кухня 
+                              💡 Освещение: кухня
+                              🔴 Статус: Выключено  
+                              
+                      else: []
+                      
+                    - action: timer.cancel
+                      metadata: {}
+                      target:
+                        entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
+                        
+                     # Обнуляем счетчик 
+                    - action: counter.reset
+                      target:
+                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_kukhnia     
+                        
+        # КАНАЛ Б: ОБНУЛЕНИЕ (ЗАДНИЙ ФРОНТ PIR)  
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.id == 'trigger_out_zone' }}"
+              
+          sequence:
+            # Обнуляем счетчик 
+            - action: counter.reset
+              target:
+                entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_kukhnia                             
+    
+        # КАНАЛ В: Включение/Выключение, Силовое удержание света,
+        #          Контроль зависания датчика PIR (ЗАДНИЙ ФРОНТ TIMER, ПЕРЕДНИЙ ФРОНТ PIR, DOOR)                    
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.id in ['system_timer_rear', 'trigger_inp_zone'] }}"
+              
+          sequence: 
+            - choose:
+    
+                # ВЕТКА 1: АВТОМАТИЧЕСКОЕ ВКЛЮЧЕНИЕ
+                - conditions:
+                    - condition: trigger
+                      id: trigger_inp_zone 
+                    - condition: state
+                      entity_id: light.dom_kukhnia_osveshchenie_vkl_vyk
+                      state: 'off'
+                    - condition: state
+                      entity_id: input_boolean.vspomogatelnyi_avtomatizatsii_voshli_vyshli_v_zonu_upravleniia_elektrichestvom
+                      state: 'on'
+                    - condition: template
+                      value_template: "{{ state_attr('sun.sun', 'elevation') | float <= states('sensor.raschetnyi_ugol_solntsa') | float }}"  
+                          
+                  sequence:
+                    - action: light.turn_on
+                      target:
+                        entity_id: light.dom_kukhnia_osveshchenie_vkl_vyk
+                        
+                    - action: input_boolean.turn_off
+                      target:
+                        entity_id: input_boolean.vspomogatelnyi_peremennoi_taimera_osveshcheniia_kukhnia  
+                        
+                    - action: timer.start
+                      target:
+                        entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
+                      data:
+                        duration: "00:01:00"
+    
+                #ВЕТКА 2: СВЕТ УЖЕ ГОРИТ (Продление и ручной режим)
+                - conditions:
+                    - condition: state
+                      entity_id: light.dom_kukhnia_osveshchenie_vkl_vyk
+                      state: 'on'
+                      
+                  sequence: 
+                    - choose: 
+        
+                        # ВЕТКА 2.1: РУЧНОЙ РЕЖИМ 
+                        - conditions:   
+                            - condition: trigger
+                              id: trigger_inp_zone 
+                            - condition: state
+                              entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
+                              state: idle
+                              
+                          sequence:
+                            - action: input_boolean.turn_on
+                              target:
+                                entity_id: input_boolean.vspomogatelnyi_peremennoi_taimera_osveshcheniia_kukhnia 
+                                
+                            - action: timer.start
+                              target:
+                                entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
+                              data:
+                                duration: "00:05:00"
+    
+                        # ВЕТКА 2.2: ПЕРЕЗАПУСК И ПОДХВАТ ВРЕМЕНИ СТАРТА
+                        - conditions:
+                            - condition: or
+                              conditions:
+                                # Вариант А: Таймер тикает, и пришло новое движение (продлеваем)
+                                - condition: and
+                                  conditions:
+                                    - condition: state
+                                      entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
+                                      state: active
+                                    - condition: trigger
+                                      id: trigger_inp_zone
+                                # Вариант Б: Таймер финишировал, но кто-то остался в зоне
+                                - condition: and
+                                  conditions:
+                                    - condition: trigger
+                                      id: system_timer_rear
+                                    - condition: state
+                                      entity_id: binary_sensor.dom_kukhnia_pir_dvizhenie
+                                      state: 'on'   
+                                      
+                          sequence:
+                            - variables:
+                                auto_time: "00:01:30"   
+                                manual_time: "00:05:00"                          
+                          
+                            - action: timer.start
+                              target:
+                                entity_id: timer.taimer_vkliuchennogo_osveshcheniia_dom_kukhnia_on_off
+                              data:
+                                duration: >-
+                                  {% if is_state('input_boolean.vspomogatelnyi_peremennoi_taimera_osveshcheniia_kukhnia', 'on') %}
+                                    {{ manual_time }}                                    
+                                  {% else %}
+                                    {{ auto_time }}
+                                  {% endif %}
+                                      
+                            # Контроль зависания датчика PIR        
+                            - if: 
+                                - condition: state
+                                  entity_id: binary_sensor.dom_kukhnia_pir_dvizhenie
+                                  state: 'on'                                
+                                - condition: trigger
+                                  id: system_timer_rear                             
+                                  
+                              then:                    
+                                # Так как датчик движения непрерывно рапортует 'on', увеличиваем защитный счетчик на +1
+                                - action: counter.increment
+                                  target:
+                                    entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_kukhnia 
+                                    
+                                - if:    
+                                    - condition: numeric_state
+                                      entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_kukhnia
+                                      above: 5 # (выше 5 — это значит 6)  
+                                      
+                                  then:
+                                    # Насильно сбрасываем датчик в 'off' через наш Python-скрипт:
+                                    - action: python_script.set_state
+                                      data:
+                                        entity_id: binary_sensor.dom_kukhnia_pir_dvizhenie
+                                        state: "off"  
+                                        
+                                    # Обнуляем счетчик 
+                                    - action: counter.reset
+                                      target:
+                                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_kukhnia                              
+                                        
+                                    # УВЕДОМЛЕНИЕ О РЕАНИМАЦИИ ДАТЧИКА:
+                                    - action: script.notify_message
+                                      data:
+                                        title: >-
+                                          ⚠️ Внимание: Дом — кухня
+                                        message: |
+                                          🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой.    
+                                        
+                                  else: []                     
+                            
+                              else:        
+                                # Обнуляем счетчик 
+                                - action: counter.reset
+                                  target:
+                                    entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_kukhnia 
+                                    
+                        # ВЕТКА 2.3: БЕЗОПАСНОЕ ВЫКЛЮЧЕНИЕ СВЕТА
+                        - conditions:
+                            - condition: trigger
+                              id: system_timer_rear
+                            - condition: template
+                              value_template: >-
+                                {{ states('binary_sensor.dom_kukhnia_pir_dvizhenie') in ['off', 'unavailable', 'unknown'] }}
+                                
+                          sequence:
+                            - action: light.turn_off
+                              target:
+                                entity_id: light.dom_kukhnia_osveshchenie_vkl_vyk                                    
+    
+                
+  mode: restart

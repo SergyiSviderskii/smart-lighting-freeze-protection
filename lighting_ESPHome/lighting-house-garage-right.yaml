@@ -1,0 +1,15 @@
+# tywe3s 
+substitutions:
+  hostname: "lighting-house-garage-right"
+  password_ota: ""
+  #key_api: "" 
+  installation_area: "дом - гараж справа"
+  timer_switch: "180000"
+  timer_button: "30000"
+
+  
+packages:
+  - !include device/common/function/lighting/switch_tywe3s/single/tywe3s.yaml
+  - !include device/common/function/lighting/switch_tywe3s/single/general.yaml
+  - !include device/common/function/lighting/switch_tywe3s/general.yaml     
+  - !include device/lighting/general.yaml

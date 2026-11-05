@@ -1,0 +1,32 @@
+substitutions:
+  friendly_name: "💡 Освещение"  
+  logger_baud_rate: 115200 
+  reboot_timeout: 0s
+  
+
+packages:
+  - !include ../common/general/components.yaml
+  - !include ../common/general/status_led.yaml  
+  - !include ../common/general/wifi_wpa2.yaml 
+  - !include ../common/general/only_time.yaml  
+ 
+sun:
+  latitude: !secret latitude_coord
+  longitude: !secret longitude_coord
+  id: sun_core
+  
+
+sensor:
+  - platform: sun
+    id: sun_elevation
+    type: elevation
+    name: "Elevation Sun" 
+  
+text_sensor:
+  - platform: sun
+    name: "Sun Next Sunrise"
+    type: sunrise
+    id: next_sunrise_0
+  - platform: sun
+    name: "Sun Next Sunset"
+    type: sunset  

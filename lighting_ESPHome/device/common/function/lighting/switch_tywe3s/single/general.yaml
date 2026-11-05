@@ -1,0 +1,247 @@
+esphome:
+  on_boot:
+    priority: 600  
+    then: 
+      - binary_sensor.template.publish:
+          id: flag_no_activation 
+          state: OFF   
+      - binary_sensor.template.publish:
+          id: pir_lighting 
+          state: OFF
+      - binary_sensor.template.publish:
+          id: flag_off 
+          state: OFF          
+      - sensor.template.publish:
+          id: timer_on_off 
+          state: '0.0'   
+      - text_sensor.template.publish:
+          id: point_bssid
+          state: "Нет данных"   
+      - text_sensor.template.publish:
+          id: bssid_point
+          state: "Нет данных" 
+    
+
+script:
+  - id: timer_script
+    mode: restart 
+    parameters:
+      delay_ms: int
+    then:
+      - delay: !lambda return delay_ms; 
+      - if:
+          condition:
+            # Четко проверяем присутствие именно Home Assistant (подписка на стейты)
+            - api.connected:
+                state_subscription_only: true
+          then:
+            - light.turn_off: $light_id 
+          else:  
+            - if:
+                condition:
+                  - light.is_on: $light_id
+                then:             
+                  - button.press: control_ha
+          
+  - id: timer_script_pir 
+    mode: restart  
+    parameters:
+      delay_ms: int
+    then:
+      - delay: !lambda return delay_ms; 
+      - binary_sensor.template.publish:
+          id: pir_lighting  
+          state: OFF  
+          
+  - id: timer_script_off
+    mode: restart  
+    then:
+      - delay: 300ms  
+      - binary_sensor.template.publish:
+          id: flag_off 
+          state: OFF       
+
+
+binary_sensor:
+  # button devise
+  - platform: gpio
+    pin:
+      number: $button_devise
+      mode: INPUT_PULLUP        # Подтягивает пин к 3.3V, чтобы не было наводок
+      inverted: true            # Кнопка замыкается на Землю (GND) при нажатии  
+    id: $button_devise_id
+    filters:
+      - delayed_on: 50ms        # Мгновенная защита от искрения контактов (дребезга)
+    on_press:                   # Срабатывает СРАЗУ при нажатии, а не после отпускания
+      then:
+        - light.toggle: $light_id 
+        
+  - platform: template
+    name: "PIR Lighting"
+    id: pir_lighting
+    device_class: motion 
+    filters:
+      - delayed_on_off: 300ms 
+    on_press:
+      then:
+        - script.execute:
+            id: timer_script_pir
+            delay_ms: !lambda return (int)(id(timer_on_off).state / 2);           
+
+  - platform: template
+    id: flag_no_activation 
+    
+  - platform: template
+    id: flag_off    
+    
+  
+button:            
+  # button control autom ha
+  - platform: template
+    name: "Control HA"
+    id: control_ha
+    on_press:
+      then:
+        - if:
+            condition:
+              - binary_sensor.is_off: flag_off 
+            then:  
+              - if:
+                  condition:
+                    - light.is_off: $light_id 
+                  then: 
+                    - if:
+                        condition:
+                          - lambda: |-
+                              return id(activation).state &&
+                                     !std::isnan(id(sun_elevation).state) &&
+                                     !std::isnan(id(calculated_sun_elevation).state) &&
+                                     id(sun_elevation).state <= id(calculated_sun_elevation).state;
+                        then:             
+                          - sensor.template.publish:
+                              id: timer_on_off
+                              state: $timer_button     
+                          - script.execute:
+                              id: timer_script
+                              delay_ms: $timer_button
+                          - light.turn_on: $light_id                               
+                  else:  
+                    - if:
+                        condition:
+                          - light.is_on: $light_id 
+                        then:                  
+                          - if:
+                              condition:
+                                - lambda: |-
+                                    return id(timer_on_off).state == 0.0; 
+                              then:
+                                - sensor.template.publish:
+                                    id: timer_on_off
+                                    state: $timer_switch 
+                                - script.execute:
+                                    id: timer_script
+                                    delay_ms: $timer_switch   
+              - if:
+                  condition:
+                    - lambda: |-
+                        return id(timer_on_off).state != 0.0; 
+                  then: 
+                    - script.execute: 
+                        id: timer_script
+                        delay_ms: !lambda return (int)id(timer_on_off).state;                    
+                    - if:
+                        condition: 
+                          - binary_sensor.is_off: pir_lighting      
+                        then:
+                          - binary_sensor.template.publish:
+                              id: pir_lighting  
+                              state: ON   
+        
+output:
+  - platform: gpio
+    pin: $light_pin 
+    id: $light_out_id
+ 
+ 
+light:
+  - platform: binary 
+    name: "ON-OFF"
+    id: $light_id
+    output: $light_out_id              
+    restore_mode: ALWAYS_OFF 
+    on_turn_on: 
+      then:
+        # Автоматическая вставка команды управления LED (если включена выше)
+        - $led_on: $led_relay 
+        - delay: 300ms
+        - if:  
+            condition:
+              - switch.is_off: activation
+            then:          
+              - script.execute:
+                  id: service_ha
+                  title_data: $friendly_name
+                  message_data: |  
+                    🏙 Зона: $installation_area
+                    🟢 Статус: Включено
+        - if:
+            condition:
+              - lambda: |-
+                  return id(timer_on_off).state == 0.0; 
+            then:
+              - button.press: control_ha
+    on_turn_off:
+      then: 
+        # Автоматическая вставка команды управления LED (если включена выше)
+        - $led_off: $led_relay 
+        - binary_sensor.template.publish:
+            id: flag_off 
+            state: ON  
+        - script.execute: timer_script_off            
+        - script.stop: timer_script
+        - script.stop: timer_script_pir 
+        - sensor.template.publish:
+            id: timer_on_off
+            state: '0.0'
+        - binary_sensor.template.publish:
+            id: pir_lighting  
+            state: OFF     
+        - if:  
+            condition:
+              - switch.is_off: activation
+              - binary_sensor.is_off: flag_no_activation
+            then:          
+              - script.execute:
+                  id: service_ha
+                  title_data: $friendly_name 
+                  message_data: |  
+                    🏙 Зона: $installation_area
+                    🔴 Статус: Выключено  
+        - binary_sensor.template.publish:
+            id: flag_no_activation
+            state: OFF                 
+    
+    
+switch:                  
+  # (API esphome) когда activation вкл.(выкл.) присудствия в зоне активации  
+  - platform: template  
+    name: "Presence activation"
+    icon: mdi:home-account
+    id: activation
+    optimistic: true
+    restore_mode: ALWAYS_ON 
+    on_turn_off:
+      then: 
+        - binary_sensor.template.publish:
+            id: flag_no_activation
+            state: ON  
+        - light.turn_off: $light_id 
+
+sensor:
+  - platform: template
+    id: timer_on_off
+    update_interval: never
+    unit_of_measurement: "ms"
+    accuracy_decimals: 0
+            
+        

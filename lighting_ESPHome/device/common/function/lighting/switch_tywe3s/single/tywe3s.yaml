@@ -1,0 +1,19 @@
+substitutions:
+  status_led: GPIO0
+  led_cmd: "0s"  
+  led_relay: gpio14  
+  led_on: "output.turn_on"  
+  led_off: "output.turn_off" 
+  button_devise: "3"
+  button_devise_id: "GPIO3"
+  light_pin: "GPIO13"
+  light_out_id: "gpio_d13"
+  light_id: "light_gpio13"
+  
+  
+output:
+  # led
+  - platform: gpio
+    pin: 14
+    id: gpio14 
+    inverted: true 
