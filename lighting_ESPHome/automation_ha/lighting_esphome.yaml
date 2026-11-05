@@ -3,150 +3,215 @@
   description: 'Автоматизация управления освещением ванная по датчикам движения, двери и таймеру от устройства'
 
   triggers:
+    # 1. Фиксация движения в любой из зон ванной
     - trigger: state
       entity_id:
         - binary_sensor.dom_vannaia_pir_dvizhenie
         - binary_sensor.dom_vannaia_unitaz_pir_dvizhenie
         - binary_sensor.dom_vannaia_dush_pir_dvizhenie
-      from: 
-        - 'off'
-      to:
-        - 'on'
+      from: 'off'
+      to: 'on'
       id: trigger_inp_zone    
         
+    # 2. Уход основного датчика в off (для быстрого сброса счетчика)
     - trigger: state
       entity_id:
         - binary_sensor.dom_vannaia_pir_dvizhenie
-      from: 
-        - 'on'
-      to:
-        - 'off'   
+      from: 'on'
+      to: 'off'   
       id: trigger_out_zone   
       
-    # Начало таймаута встроенных системных таймеров прошивки модулей
+    # 3. Окончание таймаута встроенных системных таймеров прошивки модулей (ESPHome id: pir_lighting)
     - trigger: state
       entity_id:
-        - binary_sensor.dom_vannaia_osveshchenie_pir_osveshcheniia # ESPHome id: pir_lighting
-      from: 
-        - 'off'
-      to:
-        - 'on' 
-      id: system_timer_front      
-
-    # Окончание таймаута встроенных системных таймеров прошивки модулей
-    - trigger: state
-      entity_id:
-        - binary_sensor.dom_vannaia_osveshchenie_pir_osveshcheniia # ESPHome id: pir_lighting  
-      from: 
-        - 'on'
-      to:
-        - 'off'  
+        - binary_sensor.dom_vannaia_osveshchenie_pir_osveshcheniia
+      from: 'on'
+      to: 'off'  
       id: system_timer_rear      
       
   condition: []
 
   action:  
     - choose:
-         
-        # КАНАЛ А: ОБНУЛЕНИЕ И КОНТРОЛЬ ЗАВИСАНИЯ (ЗАДНИЙ ФРОНТ PIR И ПЕРЕДНИЙ ФРОНТ ESP)  
+        
+        # ВЕТВЬ 1: ЧЕЛОВЕК ФИЗИЧЕСКИ ВЫШЕЛ (Сброс счетчика зависания)
         - conditions:
             - condition: template
-              value_template: "{{ trigger.id in ['system_timer_front', 'trigger_out_zone'] }}"
+              value_template: "{{ trigger.id == 'trigger_out_zone' }}"
+              
           sequence:
-            - if:      
-                - condition: template
-                  value_template: "{{ states('binary_sensor.dom_vannaia_pir_dvizhenie') in ['off', 'unavailable', 'unknown'] }}"   
-              then: 
-                # Обнуляем счетчик 
-                - action: counter.reset
-                  target:
-                    entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia     
+            - action: counter.reset
+              target:
+                entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia     
             
-              else:                      
-                - if: 
-                    - condition: state
-                      entity_id: binary_sensor.dom_vannaia_pir_dvizhenie
-                      state: 'on'        
-                    - condition: state
-                      entity_id: light.dom_vannaia_osveshchenie_vkl_vyk
-                      state: 'on'                
-                      
-                  then:                    
-                    # Так как датчик движения непрерывно рапортует 'on', увеличиваем защитный счетчик на +1
-                    - action: counter.increment
-                      target:
-                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia 
-                        
-                    - if:    
-                        - condition: numeric_state
-                          entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia
-                          above: 30 # (выше 30 — это значит 31)  
-                          
-                      then:
-                        # Насильно сбрасываем датчик в 'off' через наш Python-скрипт:
-                        - action: python_script.set_state
-                          data:
-                            entity_id: binary_sensor.dom_vannaia_pir_dvizhenie
-                            state: "off"  
-                            
-                        # Обнуляем счетчик 
-                        - action: counter.reset
-                          target:
-                            entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia                             
-                            
-                        # УВЕДОМЛЕНИЕ О РЕАНИМАЦИИ ДАТЧИКА:
-                        - action: script.notify_message
-                          data:
-                            title: >-
-                              ⚠️ Внимание: Дом — ванная
-                            message: |
-                              🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой.    
-                            
-                      else: []                     
-                
-                  else:        
-                    # Обнуляем счетчик 
-                    - action: counter.reset
-                      target:
-                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia  
- 
-        # КАНАЛ Б: СИЛОВОЕ УДЕРЖАНИЕ СВЕТА (ЗАДНИЙ ФРОНТ ESP И ПЕРЕДНИЙ ФРОНТ PIR)                    
+        # ВЕТВЬ 2: РАБОТА ПО ТАЙМЕРУ ИЛИ ВХОДУ (Проверка зависания + удержание света)
         - conditions:
             - condition: template
               value_template: "{{ trigger.id in ['system_timer_rear', 'trigger_inp_zone'] }}"
+              
           sequence: 
+            
+            # БЛОК А: Контроль зависания (выполняется только по сигналу окончания таймера ESP)
+            - if:      
+                - condition: template
+                  value_template: "{{ trigger.id == 'system_timer_rear' and is_state('binary_sensor.dom_vannaia_pir_dvizhenie', 'on') }}" 
+                  
+              then: 
+                # Увеличиваем защитный счетчик на +1
+                - action: counter.increment
+                  target:
+                    entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia 
+                    
+                # Если датчик висит уже больше 6 циклов — реанимируем
+                - if:    
+                    - condition: numeric_state
+                      entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia
+                      above: 5 
+                  then:
+                    # Насильно сбрасываем датчик в 'off'
+                    - action: python_script.set_state
+                      data:
+                        entity_id: binary_sensor.dom_vannaia_pir_dvizhenie
+                        state: "off"  
+                        
+                    # Обнуляем счетчик после сброса
+                    - action: counter.reset
+                      target:
+                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia                             
+                        
+                    # Отправляем уведомление
+                    - action: script.notify_message
+                      data:
+                        title: "⚠️ Внимание: Дом — ванная"
+                        message: "🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой."
+                
+                  else: []
+                  
+              else: 
+                # Обнуляем счетчик после сброса
+                - action: counter.reset
+                  target:
+                    entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia      
+
+            # БЛОК Б: Силовое удержание света (выполняется следом в этой же ветке)
             - if: 
                 - condition: or
                   conditions:
-                    - condition: state
-                      entity_id: binary_sensor.dom_vannaia_pir_dvizhenie
-                      state: 'on'        
-                    - condition: state
-                      entity_id: binary_sensor.dom_vannaia_unitaz_pir_dvizhenie
-                      state: 'on'   
-                    - condition: state
-                      entity_id: binary_sensor.dom_vannaia_dush_pir_dvizhenie
-                      state: 'on'                        
-                  
+                    - condition: trigger
+                      id: trigger_inp_zone               
+                    - condition: and
+                      conditions: 
+                        - condition: trigger
+                          id: system_timer_rear                         
+                        - condition: or
+                          conditions:                        
+                            - condition: state
+                              entity_id: binary_sensor.dom_vannaia_pir_dvizhenie
+                              state: 'on'        
+                            - condition: state
+                              entity_id: binary_sensor.dom_vannaia_unitaz_pir_dvizhenie
+                              state: 'on'   
+                            - condition: state
+                              entity_id: binary_sensor.dom_vannaia_dush_pir_dvizhenie
+                              state: 'on'
+                          
               then: 
                 - if:
-                    # Проверяем, что устройство физически в сети (игнорируя дежурный unknown)
                     - condition: not
                       conditions:
                         - condition: state
-                          entity_id: button.dom_vannaia_osveshchenie_knopka_upravleniia # ESPHome id: control_ha
+                          entity_id: button.dom_vannaia_osveshchenie_knopka_upravleniia
                           state: unavailable
-                          
                   then:
                     - action: button.press
                       target:
-                        entity_id: button.dom_vannaia_osveshchenie_knopka_upravleniia # ESPHome id: control_ha
-                      data: {}
-                      
+                        entity_id: button.dom_vannaia_osveshchenie_knopka_upravleniia
+                
                   else: []
-                  
+            
               else: []      
-                 
+
+  mode: restart
+
+
+- id: ''
+  alias: Общее дом гараж  
+  description: 'Синхронизация боковых зон с общим выключателем центрального модуля'
+  
+  triggers:
+    - trigger: state
+      entity_id:
+        - light.dom_garazh_osveshchenie_vkl_vyk_obshchii
+      from: ['off', 'on']          
+      to: ['on', 'off']  
+      
+  condition: []
+  
+  action:  
+    - choose:
+         
+        # Условие: Общий свет включили
+        - conditions:
+            - condition: state
+              entity_id: light.dom_garazh_osveshchenie_vkl_vyk_obshchii
+              state: 'on' 
+              
+          sequence:  
+            - if:
+                - condition: state
+                  entity_id: light.dom_garazh_sleva_osveshchenie_vkl_vyk
+                  state: 'off'   
+                  
+              then: 
+                - action: light.turn_on
+                  target:
+                    entity_id: light.dom_garazh_sleva_osveshchenie_vkl_vyk  
+            
+              else: []                       
+                    
+            - if:
+                - condition: state
+                  entity_id: light.dom_garazh_sprava_osveshchenie_vkl_vyk
+                  state: 'off' 
+                  
+              then:             
+                - action: light.turn_on
+                  target:
+                    entity_id: light.dom_garazh_sprava_osveshchenie_vkl_vyk 
+            
+              else: []           
+              
+        # Условие: Общий свет выключили
+        - conditions:
+            - condition: state
+              entity_id: light.dom_garazh_osveshchenie_vkl_vyk_obshchii
+              state: 'off' 
+              
+          sequence:  
+            - if:
+                - condition: state
+                  entity_id: light.dom_garazh_sleva_osveshchenie_vkl_vyk
+                  state: 'on'   
+                  
+              then: 
+                - action: light.turn_off
+                  target:
+                    entity_id: light.dom_garazh_sleva_osveshchenie_vkl_vyk
+                    
+              else: [] 
+              
+            - if:
+                - condition: state
+                  entity_id: light.dom_garazh_sprava_osveshchenie_vkl_vyk
+                  state: 'on'  
+                  
+              then:             
+                - action: light.turn_off
+                  target:
+                    entity_id: light.dom_garazh_sprava_osveshchenie_vkl_vyk 
+                    
+              else: []         
+              
   mode: restart
 
 
@@ -157,54 +222,27 @@
   triggers:
     - trigger: state
       entity_id:
+        - binary_sensor.dom_garazh_pir_dvizhenie
         - binary_sensor.dom_letniaia_kukhnia_dver_letniaia_kukhnia_garazh
-      from: 
-        - 'off'
-      to:
-        - 'on'
+      from: 'off'
+      to: 'on'
       id: trigger_inp_zone   
-  
-    - trigger: state
-      entity_id:
-        - binary_sensor.dom_garazh_pir_dvizhenie 
-      from: 
-        - 'off'
-      to:
-        - 'on'
-      id: trigger_inp_zone_1    
         
     - trigger: state
       entity_id:
-        - binary_sensor.dom_garazh_pir_dvizhenie
-        - binary_sensor.dom_letniaia_kukhnia_dver_letniaia_kukhnia_garazh        
-      from: 
-        - 'on'
-      to:
-        - 'off'   
+        - binary_sensor.dom_garazh_pir_dvizhenie      
+      from: 'on'
+      to: 'off'   
       id: trigger_out_zone   
-      
-    # Начало таймаута встроенных системных таймеров прошивки модулей
-    - trigger: state
-      entity_id:
-        - binary_sensor.dom_garazh_osveshchenie_pir_osveshcheniia # ESPHome id: pir_lighting  
-        - binary_sensor.dom_garazh_sprava_osveshchenie_pir_osveshcheniia # ESPHome id: pir_lighting
-        - binary_sensor.dom_garazh_sleva_osveshchenie_pir_osveshcheniia # ESPHome id: pir_lighting        
-      from: 
-        - 'off'
-      to:
-        - 'on' 
-      id: system_timer_front      
 
-    # Окончание таймаута встроенных системных таймеров прошивки модулей
+    # Окончание таймаута встроенных системных таймеров прошивки модулей (Центр, Право, Лево)
     - trigger: state
       entity_id:
-        - binary_sensor.dom_garazh_osveshchenie_pir_osveshcheniia # ESPHome id: pir_lighting  
-        - binary_sensor.dom_garazh_sprava_osveshchenie_pir_osveshcheniia # ESPHome id: pir_lighting
-        - binary_sensor.dom_garazh_sleva_osveshchenie_pir_osveshcheniia # ESPHome id: pir_lighting         
-      from: 
-        - 'on'
-      to:
-        - 'off'  
+        - binary_sensor.dom_garazh_osveshchenie_pir_osveshcheniia
+        - binary_sensor.dom_garazh_sprava_osveshchenie_pir_osveshcheniia
+        - binary_sensor.dom_garazh_sleva_osveshchenie_pir_osveshcheniia         
+      from: 'on'
+      to: 'off'  
       id: system_timer_rear      
       
   condition: []
@@ -212,116 +250,113 @@
   action:  
     - choose:
          
-        # КАНАЛ А: ОБНУЛЕНИЕ И КОНТРОЛЬ ЗАВИСАНИЯ (ЗАДНИЙ ФРОНТ PIR И ПЕРЕДНИЙ ФРОНТ ESP)  
+        # ВЕТВЬ 1: ЧЕЛОВЕК ФИЗИЧЕСКИ ВЫШЕЛ (Сброс счетчика зависания)
         - conditions:
             - condition: template
-              value_template: "{{ trigger.id in ['system_timer_front', 'trigger_out_zone'] }}"
+              value_template: "{{ trigger.id == 'trigger_out_zone' }}"
+              
           sequence:
+            - action: counter.reset
+              target:
+                entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh     
+            
+        # ВЕТВЬ 2: РАБОТА ПО ТАЙМЕРУ ИЛИ ВХОДУ (Проверка зависания + удержание света)
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.id in ['system_timer_rear', 'trigger_inp_zone'] }}"
+              
+          sequence:     
+            # БЛОК А: Контроль зависания основного датчика
             - if:      
                 - condition: template
-                  value_template: "{{ states('binary_sensor.dom_garazh_pir_dvizhenie') in ['off', 'unavailable', 'unknown'] }}"   
+                  value_template: "{{ trigger.id == 'system_timer_rear' and is_state('binary_sensor.dom_garazh_pir_dvizhenie', 'on') }}" 
+                  
               then: 
-                # Обнуляем счетчик 
-                - action: counter.reset
+                - action: counter.increment
                   target:
-                    entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh     
-            
-              else:                      
-                - if: 
-                    - condition: state
-                      entity_id: binary_sensor.dom_garazh_pir_dvizhenie
-                      state: 'on'        
-                    - condition: or  
-                      conditions:
-                        - condition: state
-                          entity_id: light.dom_garazh_osveshchenie_vkl_vyk_obshchii 
-                          state: 'on' 
-                        - condition: state
-                          entity_id: light.dom_garazh_osveshchenie_vkl_vyk_vkhod_letniaia_kukhnia 
-                          state: 'on'   
-                        - condition: state
-                          entity_id: light.dom_garazh_osveshchenie_vkl_vyk_tsentr
-                          state: 'on'   
-                        - condition: state
-                          entity_id: light.dom_garazh_osveshchenie_vkl_vyk_vkhod_ulitsa
-                          state: 'on' 
-                        - condition: state
-                          entity_id: light.dom_garazh_sprava_osveshchenie_vkl_vyk
-                          state: 'on'                           
-                        - condition: state
-                          entity_id: light.dom_garazh_sleva_osveshchenie_vkl_vyk
-                          state: 'on'                
+                    entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh                
+
+                - if:    
+                    - condition: numeric_state
+                      entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh
+                      above: 5
                       
-                  then:                    
-                    # Так как датчик движения непрерывно рапортует 'on', увеличиваем защитный счетчик на +1
-                    - action: counter.increment
-                      target:
-                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh 
+                  then:
+                    - action: python_script.set_state
+                      data:
+                        entity_id: binary_sensor.dom_garazh_pir_dvizhenie
+                        state: "off" 
                         
-                    - if:    
-                        - condition: numeric_state
-                          entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh
-                          above: 30 # (выше 30 — это значит 31)  
-                          
-                      then:
-                        # Насильно сбрасываем датчик в 'off' через наш Python-скрипт:
-                        - action: python_script.set_state
-                          data:
-                            entity_id: binary_sensor.dom_garazh_pir_dvizhenie
-                            state: "off"  
-                    
-                        # Обнуляем счетчик 
-                        - action: counter.reset
-                          target:
-                            entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh                             
-                            
-                        # УВЕДОМЛЕНИЕ О РЕАНИМАЦИИ ДАТЧИКА:
-                        - action: script.notify_message
-                          data:
-                            title: >-
-                              ⚠️ Внимание: Дом — гараж   
-                            message: |
-                              🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой.    
-                            
-                      else: []                     
-                
-                  else:        
-                    # Обнуляем счетчик 
                     - action: counter.reset
                       target:
                         entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh  
- 
-        # КАНАЛ Б: СИЛОВОЕ УДЕРЖАНИЕ СВЕТА (ЗАДНИЙ ФРОНТ ESP И ПЕРЕДНИЙ ФРОНТ PIR)                    
-        - conditions:
-            - condition: template
-              value_template: "{{ trigger.id in ['system_timer_rear', 'trigger_inp_zone', 'trigger_inp_zone_1'] }}"
-          sequence: 
+                        
+                    - action: script.notify_message
+                      data:
+                        title: "⚠️ Внимание: Дом — гараж"   
+                        message: "🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой."  
+                        
+                  else: []
+                  
+              else: 
+                - action: counter.reset
+                  target:
+                    entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh                
+
+            # БЛОК Б: Силовое удержание света (с экономией радиоэфира)                 
             - if:
                 - condition: or
-                  conditions:            
-                    - condition: state
-                      entity_id: binary_sensor.dom_garazh_pir_dvizhenie
-                      state: 'on'  
+                  conditions: 
                     - condition: trigger
-                      id: trigger_inp_zone                    
+                      id: trigger_inp_zone                  
+                    - condition: and
+                      conditions:  
+                        - condition: trigger
+                          id: system_timer_rear                      
+                        - condition: state
+                          entity_id: binary_sensor.dom_garazh_pir_dvizhenie
+                          state: 'on'  
+                      
               then: 
+                # 1. ЦЕНТРАЛЬНЫЙ модуль (продлеваем, только если он доступен)
                 - if:
-                    # Проверяем, что устройство физически в сети (игнорируя дежурный unknown)
                     - condition: not
                       conditions:
                         - condition: state
-                          entity_id: button.dom_garazh_osveshchenie_knopka_upravleniia # ESPHome id: control_ha
+                          entity_id: button.dom_garazh_osveshchenie_knopka_upravleniia
                           state: unavailable
                           
                   then:
                     - action: button.press
                       target:
-                        entity_id: button.dom_garazh_osveshchenie_knopka_upravleniia # ESPHome id: control_ha
-                      data: {}
-                      
+                        entity_id: button.dom_garazh_osveshchenie_knopka_upravleniia
+                        
                   else: []
             
-                # 1. Проверяем левую боковую зону. Если горит — продлеваем её таймер импульсом кнопки
+                # 2. ЛЕВЫЙ модуль: шлем команду, только если ЛЕВЫЙ свет физически включен
+                - if:
+                    - condition: state
+                      entity_id: light.dom_garazh_sleva_osveshchenie_vkl_vyk
+                      state: 'on'  
+                      
+                  then:  
+                    - if:
+                        - condition: not
+                          conditions:
+                            - condition: state
+                              entity_id: button.dom_garazh_sleva_osveshchenie_knopka_upravleniia
+                              state: unavailable
+                              
+                      then:
+                        - action: button.press
+                          target:
+                            entity_id: button.dom_garazh_sleva_osveshchenie_knopka_upravleniia
+                            
+                      else: []
+                  
+                  else: []                             
+                            
+                # 3. ПРАВЫЙ модуль: шлем команду, только если ПРАВЫЙ свет физически включен
                 - if:
                     - condition: state
                       entity_id: light.dom_garazh_sprava_osveshchenie_vkl_vyk
@@ -329,47 +364,21 @@
                       
                   then:  
                     - if:
-                        # Проверяем, что устройство физически в сети (игнорируя дежурный unknown)
                         - condition: not
                           conditions:
                             - condition: state
-                              entity_id: button.dom_garazh_sprava_osveshchenie_knopka_upravleniia # ESPHome id: control_ha
+                              entity_id: button.dom_garazh_sprava_osveshchenie_knopka_upravleniia
                               state: unavailable
                               
                       then:
                         - action: button.press
                           target:
-                            entity_id: button.dom_garazh_sprava_osveshchenie_knopka_upravleniia # ESPHome id: control_ha
-                          data: {}
-                          
-                      else: []  
-                      
-                  else: []                    
-                        
-                # 2. Проверяем правую боковую зону. Если горит — продлеваем её таймер импульсом кнопки
-                - if:
-                    - condition: state
-                      entity_id: light.dom_garazh_sleva_osveshchenie_vkl_vyk
-                      state: 'on'     
-                      
-                  then:  
-                    - if:
-                        # Проверяем, что устройство физически в сети (игнорируя дежурный unknown)
-                        - condition: not
-                          conditions:
-                            - condition: state
-                              entity_id: button.dom_garazh_sleva_osveshchenie_knopka_upravleniia # ESPHome id: control_ha
-                              state: unavailable
-                              
-                      then:
-                        - action: button.press
-                          target:
-                            entity_id: button.dom_garazh_sleva_osveshchenie_knopka_upravleniia # ESPHome id: control_ha
-                          data: {}
-                          
-                      else: []    
-                      
-                  else: []          
-          
+                            entity_id: button.dom_garazh_sprava_osveshchenie_knopka_upravleniia
+        
+                      else: []
+                  
+                  else: []
+                  
+              else: []                   
+
   mode: restart
-  
