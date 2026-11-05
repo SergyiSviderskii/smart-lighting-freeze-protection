@@ -1,0 +1,5 @@
+This script allows you to avoid freezing of ZigBee motion sensors.
+
+Create a folder and copy the file there; the path is as follows: /homeassistant/python_scripts/set_state.py
+
+Add the following to the configuration file located at /homeassistant/configuration.yaml:  python_script.

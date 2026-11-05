@@ -1,0 +1,10 @@
+Single-gang switches of two types—with neutral tywe3s.yaml and without a neutral wire—tywe3s_1.yaml
+
+
+You can use any other available device; you just need to adjust the pins.
+
+The photo shows the ones I use.
+
+Sensors are selected for a specific space; what is shown here is their actual operation in a given environment - automation_ha.
+
+The ESPHome switch is used to control a device via a Home Assistant automation that monitors whether or not someone is present in an area  or not.
