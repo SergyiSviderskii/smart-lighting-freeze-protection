@@ -4,3 +4,7 @@ Lighting automation using Zigbee devices in Home Assistant.
 Auxiliary elements, such as timer, input_boolean, python_script, are created in the Home Assistant.
 
 Sensors are selected for a specific space; what is shown here is their actual operation in a given environment.
+
+I use an external component that is also utilized in my other automations "input_boolean.vspomogatelnyi_avtomatizatsii_voshli_vyshli_v_zonu_upravleniia_elektrichestvom"; 
+it’s possible to create a "virtual" version of such an external component. 
+If you’re interested, feel free to ask—I can explain how I’ve set this up.
