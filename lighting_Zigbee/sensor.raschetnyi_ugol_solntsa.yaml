@@ -1,0 +1,15 @@
+{% set day_of_year = now().strftime('%j') | int %}
+{% set year = now().year %}
+{% if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) %}
+  {% set days_in_year = 366 %}
+  {% set offset = 173 %}
+{% else %}
+  {% set days_in_year = 365 %}
+  {% set offset = 172 %}
+{% endif %}
+{% set base = 5.5 %}
+{% set amp = 2.5 %}
+{% set pi = 3.141592653589793 %}
+{% set rad = (day_of_year - offset) * 2.0 * pi / days_in_year %}
+{% set target = base - amp * cos(rad) %}
+{{ target | round(1) }}
