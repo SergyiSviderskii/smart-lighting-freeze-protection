@@ -68,22 +68,17 @@
                       entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia
                       above: 5 
                   then:
-                    # Насильно сбрасываем датчик в 'off'
-                    - action: python_script.set_state
-                      data:
-                        entity_id: binary_sensor.dom_vannaia_pir_dvizhenie
-                        state: "off"  
-                        
-                    # Обнуляем счетчик после сброса
-                    - action: counter.reset
-                      target:
-                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_vannaia                             
-                        
                     # Отправляем уведомление
                     - action: script.notify_message
                       data:
                         title: "⚠️ Внимание: Дом — ванная"
                         message: "🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой."
+                        
+                    # Насильно сбрасываем датчик в 'off'
+                    - action: python_script.set_state
+                      data:
+                        entity_id: binary_sensor.dom_vannaia_pir_dvizhenie
+                        state: "off"  
                 
                   else: []
                   
@@ -282,19 +277,15 @@
                       above: 5
                       
                   then:
+                    - action: script.notify_message
+                      data:
+                        title: "⚠️ Внимание: Дом — гараж"   
+                        message: "🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой." 
+                        
                     - action: python_script.set_state
                       data:
                         entity_id: binary_sensor.dom_garazh_pir_dvizhenie
                         state: "off" 
-                        
-                    - action: counter.reset
-                      target:
-                        entity_id: counter.podschet_kolichestva_polnykh_taimerov_osveshcheniia_dom_garazh  
-                        
-                    - action: script.notify_message
-                      data:
-                        title: "⚠️ Внимание: Дом — гараж"   
-                        message: "🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой."  
                         
                   else: []
                   
