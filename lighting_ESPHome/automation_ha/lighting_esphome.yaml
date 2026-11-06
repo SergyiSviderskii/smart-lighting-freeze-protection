@@ -75,10 +75,19 @@
                         message: "🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой."
                         
                     # Насильно сбрасываем датчик в 'off'
-                    - action: python_script.set_state
+                    # - action: python_script.set_state
+                    #   data:
+                    #     entity_id: binary_sensor.dom_garazh_pir_dvizhenie
+                    #     state: "off" 
+                    
+                    - action: zha.set_zigbee_cluster_attribute
                       data:
-                        entity_id: binary_sensor.dom_vannaia_pir_dvizhenie
-                        state: "off"  
+                        ieee: "A4:C1:38:CA:06:XX:XX:XX" # Укажите здесь IEEE адрес датчика (из свойств ZHA)
+                        endpoint_id: 1
+                        cluster_id: 1280              # Кластер IAS Zone
+                        cluster_type: in
+                        attribute: 2                  # Атрибут ZoneStatus
+                        value: 0  
                 
                   else: []
                   
@@ -282,10 +291,19 @@
                         title: "⚠️ Внимание: Дом — гараж"   
                         message: "🔄 Основной датчик движения завис и был принудительно перезапущен автоматикой." 
                         
-                    - action: python_script.set_state
+                    # - action: python_script.set_state
+                    #   data:
+                    #     entity_id: binary_sensor.dom_garazh_pir_dvizhenie
+                    #     state: "off" 
+                    
+                    - action: zha.set_zigbee_cluster_attribute
                       data:
-                        entity_id: binary_sensor.dom_garazh_pir_dvizhenie
-                        state: "off" 
+                        ieee: "A4:C1:38:CA:06:XX:XX:XX" # Укажите здесь IEEE адрес датчика (из свойств ZHA)
+                        endpoint_id: 1
+                        cluster_id: 1280              # Кластер IAS Zone
+                        cluster_type: in
+                        attribute: 2                  # Атрибут ZoneStatus
+                        value: 0  
                         
                   else: []
                   
