@@ -48,6 +48,35 @@ The automation uses safe floating-point filters (`| float(5.5)`) to continuously
 2.  **Deploy Python Script:** Place `set_state.py` into your Home Assistant `/python_scripts/` directory.
 3.  **Calibrate the Counter:** Create a local `counter` entity in Home Assistant for the target room. Start testing with a low empirical threshold (e.g., `above: 5` cycles) to observe real-time lockup recovery before setting it to your final production value.
 
+### 💡 Important Update for ZHA (Zigbee Home Automation) Users
+
+If you are using the modern native **ZHA** integration and notice that your Zigbee motion sensors occasionally enter a "deep sleep/coma" state after a forced Python `set_state` override, it is highly recommended to replace the virtual backend state rewrite with a native Zigbee cluster command. 
+
+Recent Home Assistant core updates handle radio packet sequencing strictly, and bypassing the ZHA stack can break token synchronization. To fix this, swap the `python_script.set_state` block in your automation for a direct IAS Zone cluster attributes overwrite.
+
+**Replace this block:**
+```yaml
+- action: python_script.set_state
+  data:
+    entity_id: binary_sensor.YOUR_MOTION_SENSOR
+    state: "off"
+```
+
+**With this radio-safe native ZHA action:**
+```yaml
+- action: zha.set_zigbee_cluster_attribute
+  data:
+    ieee: "00:12:4b:00:xx:xx:xx:xx" # Replace with your sensor's IEEE address (found in ZHA device info)
+    endpoint_id: 1
+    cluster_id: 1280              # IAS Zone Cluster
+    cluster_type: in
+    attribute: 2                  # ZoneStatus
+    value: 0                      # Force reset state to "Clear / No Motion"
+```
+This forces the ZHA engine itself to safely record the state change, aligning packet bookkeeping and keeping budget hardware online.
+
+
+
 ## 📄 License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
