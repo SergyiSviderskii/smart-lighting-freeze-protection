@@ -1,5 +1,5 @@
 # smart-lighting-freeze-protection
-Advanced Home Assistant lighting ecosystem (Zigbee &amp; ESPHome) with a unique 3-layer protective mechanism against motion sensor hardware freezes.
+Advanced Home Assistant lighting ecosystem (Zigbee & ESPHome) with a unique 3-layer protective mechanism against motion sensor hardware freezes.
 
 # Smart Lighting with Motion Sensor Freeze Protection (Zigbee & ESPHome)
 
@@ -32,6 +32,25 @@ Instead of relying on external timers, this project introduces a nested, single-
 
 ---
 
+## 🔧 Hardware Insights & Zigbee PIR Revisions
+
+While the 3-layer algorithm handles any stock sensor out of the box, hardware modifications can drastically improve sensor response times and allow tighter counter calibration:
+
+### 1. Resistor-Timed Revision (`TS0202` / `_TZ3000_lf56vpxj`)
+*   **Hardware Mod:** Follow the guide by [Victor (pvvx) — TS0202_TZ3000](https://github.io). Removing the timing resistor reduces the "blind time" and switches the sensor to **short 4–5 second pulses**.
+*   **Automation Calibration:** With this fast reset behavior, you can tighten the freeze protection counter threshold to just **2 cycles** (triggering the forced reset on the **3rd cycle**).
+
+### 2. Multi-Variant MOSFET Revisions (`TS0202` / `_TZ3000_o4mkahkc` & similar)
+*   **Hardware Mod:** These boards use unmarked MOSFET cascades to control hold time (`Pin 6` / `ONTIME`) and sensitivity (`Pin 1` / `SENS`) of the 6-pin digital PIR element.
+*   **What Was Done:** On my two board variants, I removed the high-value pull-up resistors feeding these cascades and tied the corresponding PIR inputs directly to **GND (ground)** so they never float. Everything is clearly visible on the photos below (click any image to zoom in):
+<img width="3024" height="4032" alt="IMG_2143" src="https://github.com/user-attachments/assets/d957a977-dd11-41a0-bf60-4fddabc42863" />
+<img width="4032" height="3024" alt="IMG_2142" src="https://github.com/user-attachments/assets/3b8af3cf-e511-420b-a29c-2c8da5774e92" />
+
+
+
+
+---
+
 ## ☀️ Solar Elevation Modeling
 
 Both setups feature an automated template calculating seasonal solar alignment. Instead of hardcoding static offsets, a dynamic template models sun angles mathematically:
@@ -46,7 +65,9 @@ The automation uses safe floating-point filters (`| float(5.5)`) to continuously
 
 1.  **Secrets Configuration:** Populate the provided `secrets.yaml` framework with your specific Wi-Fi routing paths and access tokens.
 2.  **Deploy Python Script:** Place `set_state.py` into your Home Assistant `/python_scripts/` directory.
-3.  **Calibrate the Counter:** Create a local `counter` entity in Home Assistant for the target room. Start testing with a low empirical threshold (e.g., `above: 5` cycles) to observe real-time lockup recovery before setting it to your final production value.
+3.  **Calibrate the Counter:** Create a local `counter` entity in Home Assistant for the target room:
+    *   For **stock unmodded sensors** (30s–90s hold time), start with a conservative threshold (e.g., `above: 5` cycles) to observe real-time lockup recovery.
+    *   For **hardware-modded short-pulse sensors** (4–5s hold time), you can safely tighten the threshold to `2` (resetting on the 3rd cycle).
 
 ### 💡 Important Update for ZHA (Zigbee Home Automation) Users
 
@@ -64,10 +85,7 @@ Recent Home Assistant core updates handle radio packet sequencing strictly, and 
 
 This forces the ZHA engine itself to safely record the state change, aligning packet bookkeeping and keeping budget hardware online.
 
-
+---
 
 ## 📄 License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-
-
