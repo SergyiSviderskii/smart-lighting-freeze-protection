@@ -37,7 +37,7 @@ Instead of relying on external timers, this project introduces a nested, single-
 While the 3-layer algorithm handles any stock sensor out of the box, hardware modifications can drastically improve sensor response times and allow tighter counter calibration:
 
 ### 1. Resistor-Timed Revision (`TS0202` / `_TZ3000_lf56vpxj`)
-*   **Hardware Mod:** Follow the guide by [Victor (pvvx) — TS0202_TZ3000](https://github.io). Removing the timing resistor reduces the "blind time" and switches the sensor to **short 4–5 second pulses**.
+*   **Hardware Mod:** Follow the guide by [Victor (pvvx) — TS0202_TZ3000]((https://pvvx.github.io/TS0202_TZ3000/)). Removing the timing resistor reduces the "blind time" and switches the sensor to **short 4–5 second pulses**.
 *   **Automation Calibration:** With this fast reset behavior, you can tighten the freeze protection counter threshold to just **2 cycles** (triggering the forced reset on the **3rd cycle**).
 
 ### 2. Multi-Variant MOSFET Revisions (`TS0202` / `_TZ3000_o4mkahkc` & similar)
