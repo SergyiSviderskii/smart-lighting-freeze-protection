@@ -54,6 +54,8 @@ While the 3-layer algorithm handles any stock sensor out of the box, hardware mo
 
 *Board Variant 2 (`IHSENO V9` / `ZTU` module): Same modification — pull-up resistors removed and corresponding PIR inputs tied directly to GND.*
 
+This modification for shorter pulses seems to completely resolve the issue of the Zigbee sensor getting stuck.
+By adjusting the timing characteristics, it is possible to tailor the setup to each specific room.
 ---
 
 ## ☀️ Solar Elevation Modeling
