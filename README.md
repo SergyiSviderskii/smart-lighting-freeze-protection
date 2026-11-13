@@ -62,17 +62,6 @@ Recent Home Assistant core updates handle radio packet sequencing strictly, and 
     state: "off"
 ```
 
-**With this radio-safe native ZHA action:**
-```yaml
-- action: zha.set_zigbee_cluster_attribute
-  data:
-    ieee: "00:12:4b:00:xx:xx:xx:xx" # Replace with your sensor's IEEE address (found in ZHA device info)
-    endpoint_id: 1
-    cluster_id: 1280              # IAS Zone Cluster
-    cluster_type: in
-    attribute: 2                  # ZoneStatus
-    value: 0                      # Force reset state to "Clear / No Motion"
-```
 This forces the ZHA engine itself to safely record the state change, aligning packet bookkeeping and keeping budget hardware online.
 
 
